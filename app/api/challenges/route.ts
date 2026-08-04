@@ -1,24 +1,23 @@
-const instance = process.env.SN_INSTANCE!;
-const user = process.env.SN_USER!;
-const password = process.env.SN_PASSWORD!;
+import { NextRequest } from "next/server";
+import { snTableGet } from "@/lib/servicenow";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const limit = req.nextUrl.searchParams.get("limit") ?? "50";
 
-    const auth = Buffer.from(
-        `${user}:${password}`
-    ).toString("base64");
-
-    const response = await fetch(
-        `${instance}/api/now/table/x_trhrt_trh_plus_challenge?sysparm_limit=20`,
-        {
-            headers: {
-                Authorization: `Basic ${auth}`,
-                Accept: "application/json",
-            },
-        }
-    );
-
-    const data = await response.json();
+  try {
+    const data = await snTableGet("x_trhrt_trh_plus_challenge", {
+      sysparm_limit: limit,
+      sysparm_query: "ORDERBYDESCsys_created_on",
+    });
 
     return Response.json(data);
+  } catch (err) {
+    return Response.json(
+      {
+        error:
+          err instanceof Error ? err.message : "Unknown error contacting ServiceNow.",
+      },
+      { status: 502 }
+    );
+  }
 }
