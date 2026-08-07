@@ -8,6 +8,10 @@ export async function GET(req: NextRequest) {
     const data = await snTableGet("x_trhrt_trh_plus_challenge_instance", {
       sysparm_limit: limit,
       sysparm_query: "ORDERBYDESCsys_created_on",
+      // Reference fields (challenge, team, player) otherwise come back as a
+      // bare sys_id with no label — "all" guarantees a display_value
+      // alongside it for every field, which the page then reads.
+      sysparm_display_value: "all",
     });
 
     return Response.json(data);

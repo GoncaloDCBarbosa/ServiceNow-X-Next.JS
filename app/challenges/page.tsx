@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "../components/SiteHeader";
+import { normalizeRecords } from "@/lib/sn-format";
 
 type Challenge = Record<string, string>;
 type PageState = "loading" | "ready" | "error";
@@ -87,7 +88,7 @@ export default function ChallengesPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setChallenges(data.result ?? []);
+        setChallenges(normalizeRecords(data.result ?? []));
         setSelectedState("all");
         setStatus("ready");
       })

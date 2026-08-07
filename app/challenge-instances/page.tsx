@@ -3,11 +3,17 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { SiteHeader } from "../components/SiteHeader";
+import { normalizeRecords } from "@/lib/sn-format";
 
 type Challenge = Record<string, string>;
 type PageState = "loading" | "ready" | "error";
 
-const TITLE_FIELDS = ["name", "short_description", "number"];
+// This table has no "name"/"short_description"/"number" field of its own —
+// unlike Challenges or Players, an instance's natural title is whichever
+// Challenge it's a run of, so "challenge" is included as the last-resort
+// source. It comes through as a proper label (not a sys_id) now that the
+// API route requests sysparm_display_value=all.
+const TITLE_FIELDS = ["name", "short_description", "number", "challenge"];
 const DESCRIPTION_FIELDS = ["description", "short_description"];
 const POINTS_FIELDS = ["points", "reward_points", "u_points", "point_value"];
 
@@ -89,7 +95,7 @@ export default function ChallengeInstancesPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setInstances(data.result ?? []);
+        setInstances(normalizeRecords(data.result ?? []));
         setSelectedState("all");
         setStatus("ready");
       })
@@ -242,7 +248,7 @@ export default function ChallengeInstancesPage() {
           fallbackFields={fallbackFields}
           onClose={() => setShowCreate(false)}
           onCreated={(record) => {
-            setInstances((prev) => [record, ...prev]);
+            setInstances((prev) => [normalizeRecords([record])[0], ...prev]);
             setShowCreate(false);
           }}
         />
@@ -332,21 +338,34 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
     record.active === "true" ? true : record.active === "false" ? false : undefined;
   const stateValue = stateKey ? record[stateKey] : undefined;
 
+  // Who the run belongs to — a team instance has "team", an individual one
+  // has "player" instead. Surfaced as a subtitle since "challenge" is now
+  // doing double duty as the card's title.
+  const runBy = pick(record, ["team", "player"].filter((k) => k !== title?.key));
+
   const extraFields = Object.entries(record).filter(
     ([key, value]) =>
       value &&
       !HIDDEN_FIELDS.has(key) &&
       key !== title?.key &&
       key !== description?.key &&
+      key !== runBy?.key &&
       key !== stateKey
   );
 
   return (
     <div className="panel" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {title?.value ?? "Untitled instance"}
-        </h3>
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+            {title?.value ?? "Untitled instance"}
+          </h3>
+          {runBy && (
+            <p className="mono" style={{ fontSize: 11.5, color: "var(--muted)", margin: "3px 0 0" }}>
+              {formatStateLabel(runBy.key)}: {runBy.value}
+            </p>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {stateValue && (
             <span
@@ -468,7 +487,7 @@ type FieldRow = {
 // Fields ServiceNow computes on its own (from the selected Challenge, or
 // once "Start Challenge" runs) — left out of the create form entirely
 // rather than guessed at here.
-const EXCLUDED_FIELDS = new Set(["start_date", "end_date", "points"]);
+const EXCLUDED_FIELDS = new Set(["start_date", "end_date", "points", "state"]);
 
 let rowIdCounter = 0;
 function nextRowId() {
