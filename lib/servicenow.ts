@@ -22,10 +22,10 @@ function getCredentials() {
  * GET against a ServiceNow Table API endpoint, shared by every API route
  * so auth, error handling, and defaults live in one place.
  */
-export async function snTableGet(
+export async function snTableGet<T = Record<string, string>>(
   table: string,
   params: SnQueryParams = {}
-): Promise<SnResult> {
+): Promise<SnResult<T>> {
   const { instance, user, password } = getCredentials();
 
   const url = new URL(`/api/now/table/${table}`, instance);
@@ -63,5 +63,51 @@ export async function snTableGet(
     throw new Error(message);
   }
 
-  return data as SnResult;
+  return data as SnResult<T>;
+}
+
+/**
+ * POST against a ServiceNow Table API endpoint to create a new record.
+ * Mirrors snTableGet's auth/error handling.
+ */
+export async function snTablePost(
+  table: string,
+  fields: Record<string, string>
+): Promise<{ result: Record<string, string> }> {
+  const { instance, user, password } = getCredentials();
+
+  const url = new URL(`/api/now/table/${table}`, instance);
+  const auth = Buffer.from(`${user}:${password}`).toString("base64");
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(fields),
+    cache: "no-store",
+  });
+
+  const raw = await res.text();
+  let data: unknown = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new Error(
+      `ServiceNow returned a non-JSON response (status ${res.status}).`
+    );
+  }
+
+  if (!res.ok) {
+    const errorBody = data as { error?: { message?: string; detail?: string } };
+    const message =
+      errorBody?.error?.message ||
+      errorBody?.error?.detail ||
+      `ServiceNow request failed with status ${res.status}.`;
+    throw new Error(message);
+  }
+
+  return data as { result: Record<string, string> };
 }

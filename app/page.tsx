@@ -13,6 +13,10 @@ export default function Home() {
   const [userPreview, setUserPreview] = useState<string[]>([]);
   const [userError, setUserError] = useState<string>();
 
+  const [instanceState, setInstanceState] = useState<FetchState>("loading");
+  const [instancePreview, setInstancePreview] = useState<string[]>([]);
+  const [instanceError, setInstanceError] = useState<string>();
+
   useEffect(() => {
     fetch("/api/challenges?limit=4")
       .then((res) => res.json())
@@ -27,6 +31,21 @@ export default function Home() {
       .catch((err) => {
         setChallengeError(err instanceof Error ? err.message : "Request failed.");
         setChallengeState("error");
+      });
+
+    fetch("/api/challenge-instances?limit=4")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        const rows: Record<string, string>[] = data.result ?? [];
+        setInstancePreview(
+          rows.map((r) => r.name || r.short_description || r.number || "Untitled instance")
+        );
+        setInstanceState("ready");
+      })
+      .catch((err) => {
+        setInstanceError(err instanceof Error ? err.message : "Request failed.");
+        setInstanceState("error");
       });
 
     fetch("/api/users?limit=4")
@@ -98,6 +117,17 @@ export default function Home() {
             status={userState}
             preview={userPreview}
             errorMessage={userError}
+          />
+          <HubTile
+            href="/challenge-instances"
+            accent="amber"
+            icon="◆"
+            title="Challenge Instances"
+            description="Every in-progress or completed run of a challenge, tied to the player taking it on."
+            table="x_trhrt_trh_plus_challenge_instance"
+            status={instanceState}
+            preview={instancePreview}
+            errorMessage={instanceError}
           />
         </section>
       </main>
