@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight, type LucideIcon } from "lucide-react";
 
 export type FetchState = "loading" | "ready" | "error";
 
 interface HubTileProps {
   href: string;
-  accent: "amber" | "violet";
-  icon: string;
+  icon: LucideIcon;
   title: string;
   description: string;
   table: string;
@@ -18,8 +18,7 @@ interface HubTileProps {
 
 export function HubTile({
   href,
-  accent,
-  icon,
+  icon: Icon,
   title,
   description,
   table,
@@ -27,30 +26,17 @@ export function HubTile({
   preview,
   errorMessage,
 }: HubTileProps) {
-  const accentColor = accent === "amber" ? "var(--amber)" : "var(--violet)";
-
   return (
-    <Link
-      href={href}
-      className={`tile tile--${accent}`}
-      style={{ textDecoration: "none", color: "inherit" }}
-    >
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-        }}
-      >
+    <Link href={href} className="tile" style={{ textDecoration: "none", color: "inherit" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div className="tile-icon" aria-hidden>
-          {icon}
+          <Icon size={20} strokeWidth={1.75} />
         </div>
-        <span className="eyebrow mono">{table}</span>
+        <span className="eyebrow">{table}</span>
       </div>
 
-      <div style={{ position: "relative" }}>
-        <h2 style={{ fontSize: 21, fontWeight: 600, letterSpacing: "-0.01em", margin: "0 0 6px" }}>
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.01em", margin: "0 0 6px" }}>
           {title}
         </h2>
         <p style={{ margin: 0, color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
@@ -58,8 +44,8 @@ export function HubTile({
         </p>
       </div>
 
-      <div style={{ position: "relative", borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
-        <div className="eyebrow" style={{ marginBottom: 8 }}>
+      <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
+        <div className="caption" style={{ marginBottom: 8 }}>
           Latest records
         </div>
 
@@ -104,15 +90,15 @@ export function HubTile({
       <div
         className="mono"
         style={{
-          position: "relative",
           fontSize: 13,
-          color: accentColor,
+          color: "var(--accent)",
           display: "flex",
           alignItems: "center",
           gap: 6,
         }}
       >
-        Open {title} →
+        Open {title}
+        <ArrowRight size={14} aria-hidden />
       </div>
     </Link>
   );

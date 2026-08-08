@@ -2,12 +2,19 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
+import { Plus, X } from "lucide-react";
 import { SiteHeader } from "../components/SiteHeader";
+import { normalizeRecords } from "@/lib/sn-format";
 
 type Challenge = Record<string, string>;
 type PageState = "loading" | "ready" | "error";
 
-const TITLE_FIELDS = ["name", "short_description", "number"];
+// This table has no "name"/"short_description"/"number" field of its own —
+// unlike Challenges or Players, an instance's natural title is whichever
+// Challenge it's a run of, so "challenge" is included as the last-resort
+// source. It comes through as a proper label (not a sys_id) now that the
+// API route requests sysparm_display_value=all.
+const TITLE_FIELDS = ["name", "short_description", "number", "challenge"];
 const DESCRIPTION_FIELDS = ["description", "short_description"];
 const POINTS_FIELDS = ["points", "reward_points", "u_points", "point_value"];
 
@@ -89,7 +96,7 @@ export default function ChallengeInstancesPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setInstances(data.result ?? []);
+        setInstances(normalizeRecords(data.result ?? []));
         setSelectedState("all");
         setStatus("ready");
       })
@@ -162,7 +169,7 @@ export default function ChallengeInstancesPage() {
             <p className="eyebrow mono" style={{ marginBottom: 10 }}>
               x_trhrt_trh_plus_challenge_instance
             </p>
-            <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 8 }}>
+            <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.015em", marginBottom: 8 }}>
               Challenge Instances
             </h1>
             <p style={{ color: "var(--muted)", fontSize: 15 }}>
@@ -176,8 +183,8 @@ export default function ChallengeInstancesPage() {
             onClick={() => setShowCreate(true)}
             className="mono"
             style={{
-              background: "var(--amber)",
-              border: "1px solid var(--amber)",
+              background: "var(--accent)",
+              border: "1px solid var(--accent)",
               color: "var(--ink)",
               padding: "10px 18px",
               borderRadius: 8,
@@ -185,9 +192,13 @@ export default function ChallengeInstancesPage() {
               fontWeight: 600,
               cursor: "pointer",
               flexShrink: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            + New instance
+            <Plus size={14} aria-hidden />
+            New instance
           </button>
         </section>
 
@@ -242,7 +253,7 @@ export default function ChallengeInstancesPage() {
           fallbackFields={fallbackFields}
           onClose={() => setShowCreate(false)}
           onCreated={(record) => {
-            setInstances((prev) => [record, ...prev]);
+            setInstances((prev) => [normalizeRecords([record])[0], ...prev]);
             setShowCreate(false);
           }}
         />
@@ -288,7 +299,7 @@ function StateTabs({
               flexShrink: 0,
               background: "none",
               border: "none",
-              borderBottom: isActive ? "2px solid var(--violet)" : "2px solid transparent",
+              borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
               color: isActive ? "var(--paper)" : "var(--muted)",
               padding: "0 4px 10px",
               marginRight: 18,
@@ -302,12 +313,12 @@ function StateTabs({
             {s.label}
             <span
               style={{
-                fontSize: 10.5,
+                fontSize: 12,
                 lineHeight: 1,
                 padding: "3px 6px",
                 borderRadius: 999,
-                background: isActive ? "var(--violet-soft)" : "rgba(255,255,255,0.06)",
-                color: isActive ? "var(--violet)" : "var(--muted)",
+                background: isActive ? "var(--accent-soft)" : "rgba(255,255,255,0.06)",
+                color: isActive ? "var(--accent)" : "var(--muted)",
               }}
             >
               {s.count}
@@ -332,26 +343,39 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
     record.active === "true" ? true : record.active === "false" ? false : undefined;
   const stateValue = stateKey ? record[stateKey] : undefined;
 
+  // Who the run belongs to — a team instance has "team", an individual one
+  // has "player" instead. Surfaced as a subtitle since "challenge" is now
+  // doing double duty as the card's title.
+  const runBy = pick(record, ["team", "player"].filter((k) => k !== title?.key));
+
   const extraFields = Object.entries(record).filter(
     ([key, value]) =>
       value &&
       !HIDDEN_FIELDS.has(key) &&
       key !== title?.key &&
       key !== description?.key &&
+      key !== runBy?.key &&
       key !== stateKey
   );
 
   return (
     <div className="panel" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {title?.value ?? "Untitled instance"}
-        </h3>
+        <div>
+          <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+            {title?.value ?? "Untitled instance"}
+          </h3>
+          {runBy && (
+            <p className="mono" style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 0" }}>
+              {formatStateLabel(runBy.key)}: {runBy.value}
+            </p>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {stateValue && (
             <span
               className="mono status-pill"
-              style={{ color: "var(--violet)", borderColor: "var(--hairline)" }}
+              style={{ color: "var(--accent)", borderColor: "var(--hairline)" }}
             >
               {formatStateLabel(stateValue)}
             </span>
@@ -371,7 +395,7 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
       )}
 
       {points && (
-        <div className="mono" style={{ fontSize: 13, color: "var(--amber)" }}>
+        <div className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
           {points.value} pts
         </div>
       )}
@@ -385,9 +409,9 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
               background: "none",
               border: "1px solid var(--hairline)",
               color: "var(--muted)",
-              fontSize: 11,
+              fontSize: 12,
               padding: "4px 8px",
-              borderRadius: 6,
+              borderRadius: 4,
               cursor: "pointer",
             }}
           >
@@ -398,7 +422,7 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
             <dl style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px" }}>
               {extraFields.map(([key, value]) => (
                 <Fragment key={key}>
-                  <dt className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
+                  <dt className="mono" style={{ fontSize: 12, color: "var(--muted)" }}>
                     {key}
                   </dt>
                   <dd style={{ fontSize: 12.5, margin: 0, wordBreak: "break-word" }}>
@@ -468,7 +492,7 @@ type FieldRow = {
 // Fields ServiceNow computes on its own (from the selected Challenge, or
 // once "Start Challenge" runs) — left out of the create form entirely
 // rather than guessed at here.
-const EXCLUDED_FIELDS = new Set(["start_date", "end_date", "points"]);
+const EXCLUDED_FIELDS = new Set(["start_date", "end_date", "points", "state"]);
 
 let rowIdCounter = 0;
 function nextRowId() {
@@ -681,7 +705,7 @@ function CreateInstanceModal({
       onClick={onClose}
     >
       <div
-        className="panel"
+        className="modal-surface"
         style={{ width: "100%", maxWidth: 560, padding: 24 }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -694,12 +718,12 @@ function CreateInstanceModal({
           }}
         >
           <div>
-            <p className="eyebrow mono" style={{ marginBottom: 6 }}>
+            <p className="eyebrow" style={{ marginBottom: 6 }}>
               x_trhrt_trh_plus_challenge_instance
             </p>
             <h2 style={{ fontSize: 19, fontWeight: 600, margin: 0 }}>New challenge instance</h2>
             {schemaStatus === "error" && (
-              <p className="mono" style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+              <p className="mono" style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
                 Couldn&apos;t read the table schema — showing plain fields instead.
               </p>
             )}
@@ -707,19 +731,21 @@ function CreateInstanceModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="mono"
             style={{
               background: "none",
               border: "1px solid var(--hairline)",
               color: "var(--muted)",
-              borderRadius: 6,
+              borderRadius: 4,
               width: 28,
               height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               cursor: "pointer",
               flexShrink: 0,
             }}
           >
-            ×
+            <X size={15} aria-hidden />
           </button>
         </div>
 
@@ -762,12 +788,16 @@ function CreateInstanceModal({
               color: "var(--muted)",
               fontSize: 12,
               padding: "6px 10px",
-              borderRadius: 6,
+              borderRadius: 4,
               cursor: "pointer",
               marginBottom: 16,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
             }}
           >
-            + Add field
+            <Plus size={12} aria-hidden />
+            Add field
           </button>
 
           {error && (
@@ -798,8 +828,8 @@ function CreateInstanceModal({
               disabled={submitting || schemaStatus === "loading"}
               className="mono"
               style={{
-                background: "var(--amber)",
-                border: "1px solid var(--amber)",
+                background: "var(--accent)",
+                border: "1px solid var(--accent)",
                 color: "var(--ink)",
                 padding: "9px 18px",
                 borderRadius: 8,
@@ -823,7 +853,7 @@ const fieldInputStyle: CSSProperties = {
   padding: "8px 10px",
   background: "var(--ink)",
   border: "1px solid var(--hairline)",
-  borderRadius: 6,
+  borderRadius: 4,
   color: "var(--paper)",
   fontSize: 13,
   outline: "none",
@@ -874,7 +904,7 @@ function FieldRowInput({
           {row.label}
           {row.mandatory && <span style={{ color: "var(--bad)", marginLeft: 4 }}>*</span>}
           {disabled && (
-            <span style={{ display: "block", fontSize: 10, color: "var(--muted)", opacity: 0.8 }}>
+            <span style={{ display: "block", fontSize: 12, color: "var(--muted)", opacity: 0.8 }}>
               cleared — pick one
             </span>
           )}
@@ -932,7 +962,7 @@ function FieldRowInput({
                   right: 0,
                   background: "var(--ink)",
                   border: "1px solid var(--hairline)",
-                  borderRadius: 6,
+                  borderRadius: 4,
                   maxHeight: 170,
                   overflowY: "auto",
                   zIndex: 60,
@@ -983,7 +1013,7 @@ function FieldRowInput({
               gap: 8,
               padding: "8px 10px",
               border: "1px solid var(--hairline)",
-              borderRadius: 6,
+              borderRadius: 4,
               background: "var(--ink)",
             }}
           >
@@ -1032,18 +1062,20 @@ function FieldRowInput({
         type="button"
         onClick={onRemove}
         aria-label="Remove field"
-        className="mono"
         style={{
           background: "none",
           border: "1px solid var(--hairline)",
           color: "var(--muted)",
-          borderRadius: 6,
+          borderRadius: 4,
           width: 34,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           flexShrink: 0,
           cursor: "pointer",
         }}
       >
-        ×
+        <X size={14} aria-hidden />
       </button>
     </div>
   );

@@ -1,15 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Self-hosted from the TRH Design System (tokens/README.md → typography.font.ui
+// / .mono). Local files avoid a runtime dependency on Google Fonts entirely.
+const interSans = localFont({
+  src: [
+    { path: "./fonts/Inter-VariableFont_opsz,wght.ttf", style: "normal" },
+    { path: "./fonts/Inter-Italic-VariableFont_opsz,wght.ttf", style: "italic" },
+  ],
+  variable: "--font-inter",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const jetbrainsMono = localFont({
+  src: [
+    { path: "./fonts/JetBrainsMono-VariableFont_wght.ttf", style: "normal" },
+    { path: "./fonts/JetBrainsMono-Italic-VariableFont_wght.ttf", style: "italic" },
+  ],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

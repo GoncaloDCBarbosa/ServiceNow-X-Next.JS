@@ -1,17 +1,59 @@
 @import "tailwindcss";
 
+/* ============================================================
+   TRH Design System tokens
+   Source: TRH Design System v1.2.1, tokens/tokens.json + PALETTE.md.
+   Copied as literal values (not a live @import) so the app has no
+   dependency on where the design package happens to live — per
+   rules/digital.md ("Use variables, never handwritten hex"), every
+   colour below is still a token reference, just pinned locally.
+
+   Surface: dark (this is an internal operational console, but one
+   that's meant to carry brand presence the way an executive/gamification
+   dashboard does — rules/digital.md).
+   Domain: ServiceNow (rules/digital.md — "platform colours only when
+   the content belongs to that platform"; this console is entirely
+   ServiceNow Table API data), so color.domain.servicenow is the single
+   dominant accent rather than TRH corporate cyan, which stays reserved
+   for the logo mark itself.
+   ============================================================ */
 :root {
-  --ink: #0a0e17;
-  --panel: #121826;
-  --hairline: #232b3d;
-  --paper: #edf0f5;
-  --muted: #8892a6;
-  --amber: #f2a93b;
-  --amber-soft: rgba(242, 169, 59, 0.12);
-  --violet: #8b7cf6;
-  --violet-soft: rgba(139, 124, 246, 0.14);
-  --good: #4ade80;
-  --bad: #f87171;
+  /* Neutrals — color.neutral.dark.* */
+  --ink: #000000; /* bg-dark-primary */
+  --panel: #18181b; /* bg-dark-secondary */
+  --card: #ffffff0d; /* bg-dark-card, translucent 5% white */
+  --hairline: #ffffff1a; /* border-dark */
+  --hairline-strong: #ffffff2e; /* border-dark-strong */
+
+  /* Text — color.neutral.text.dark.* */
+  --paper: #ffffff; /* text-dark-primary */
+  --paper-secondary: #d1d5db; /* text-dark-secondary */
+  --muted: #9ca3af; /* text-dark-tertiary / muted, AA on black */
+
+  /* Accent — color.domain.servicenow (this console's platform) */
+  --accent: #00bb7f;
+  --accent-soft: rgba(0, 187, 127, 0.14);
+
+  /* color.brand.cyan-interactive — reserved for the TRH logo mark only */
+  --brand-cyan: #22d3ee;
+
+  /* Semantic — color.semantic.*.dark */
+  --good: #00bb7f; /* success-dark (same value as the ServiceNow accent) */
+  --warning: #fe6e00; /* warning-dark */
+  --warning-soft: rgba(254, 110, 0, 0.14);
+  --bad: #f87171; /* error-dark */
+  --info: #3080ff; /* info-dark */
+
+  /* Radius — radius.* */
+  --radius-sm: 4px; /* badges, inputs */
+  --radius-md: 8px; /* buttons */
+  --radius-lg: 12px; /* cards */
+  --radius-xl: 16px; /* modals */
+
+  /* Motion — motion.* */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-hover: 180ms;
+  --dur-modal: 220ms;
 
   --background: var(--ink);
   --foreground: var(--paper);
@@ -20,8 +62,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 * {
@@ -34,17 +76,14 @@ body {
 }
 
 body {
+  /* Flat surface — rules/core.md: "No decorative gradients ... behind text". */
   background: var(--ink);
-  background-image: radial-gradient(
-      circle at 12% 0%,
-      rgba(139, 124, 246, 0.08),
-      transparent 45%
-    ),
-    radial-gradient(circle at 88% 12%, rgba(242, 169, 59, 0.06), transparent 40%);
-  background-attachment: fixed;
   color: var(--paper);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -52,14 +91,14 @@ a {
 }
 
 ::selection {
-  background: var(--violet);
+  background: var(--accent);
   color: var(--ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .container {
@@ -76,6 +115,17 @@ a {
   color: var(--muted);
 }
 
+/* Plain-language section labels ("Latest records", taglines) — Inter,
+   not mono. Mono/eyebrow stays reserved for real IDs and schema names
+   per rules/digital.md ("JetBrains Mono for code, IDs and logs only"). */
+.caption {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .mono {
   font-family: var(--font-mono), monospace;
 }
@@ -83,7 +133,14 @@ a {
 .panel {
   background: var(--panel);
   border: 1px solid var(--hairline);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
+}
+
+/* Modal / overlay surfaces get the larger token radius. */
+.modal-surface {
+  background: var(--panel);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-xl);
 }
 
 .tile {
@@ -91,56 +148,28 @@ a {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 28px;
-  border-radius: 18px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--hairline);
-  background: linear-gradient(180deg, var(--panel), var(--ink));
-  overflow: hidden;
-  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  background: var(--card);
+  transition: border-color var(--dur-hover) var(--ease), transform var(--dur-hover) var(--ease);
 }
 
 .tile:hover,
 .tile:focus-visible {
   transform: translateY(-2px);
-  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
-}
-
-.tile::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(var(--hairline) 1px, transparent 1px),
-    linear-gradient(90deg, var(--hairline) 1px, transparent 1px);
-  background-size: 22px 22px;
-  opacity: 0.12;
-  pointer-events: none;
-}
-
-.tile--amber:hover {
-  border-color: color-mix(in srgb, var(--amber) 55%, var(--hairline));
-}
-.tile--violet:hover {
-  border-color: color-mix(in srgb, var(--violet) 55%, var(--hairline));
+  border-color: var(--hairline-strong);
 }
 
 .tile-icon {
-  position: relative;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-.tile--amber .tile-icon {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-.tile--violet .tile-icon {
-  background: var(--violet-soft);
-  color: var(--violet);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .status-pill {
@@ -148,7 +177,7 @@ a {
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 3px 8px;
@@ -187,7 +216,7 @@ a {
 .data-table th {
   text-align: left;
   font-family: var(--font-mono), monospace;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);

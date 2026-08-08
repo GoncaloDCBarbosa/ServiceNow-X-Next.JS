@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "../components/SiteHeader";
+import { normalizeRecords } from "@/lib/sn-format";
 
 type Challenge = Record<string, string>;
 type PageState = "loading" | "ready" | "error";
@@ -87,7 +88,7 @@ export default function ChallengesPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setChallenges(data.result ?? []);
+        setChallenges(normalizeRecords(data.result ?? []));
         setSelectedState("all");
         setStatus("ready");
       })
@@ -142,7 +143,7 @@ export default function ChallengesPage() {
           <p className="eyebrow mono" style={{ marginBottom: 10 }}>
             x_trhrt_trh_plus_challenge
           </p>
-          <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 8 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.015em", marginBottom: 8 }}>
             Challenges
           </h1>
           <p style={{ color: "var(--muted)", fontSize: 15 }}>
@@ -238,7 +239,7 @@ function StateTabs({
               flexShrink: 0,
               background: "none",
               border: "none",
-              borderBottom: isActive ? "2px solid var(--violet)" : "2px solid transparent",
+              borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
               color: isActive ? "var(--paper)" : "var(--muted)",
               padding: "0 4px 10px",
               marginRight: 18,
@@ -252,12 +253,12 @@ function StateTabs({
             {s.label}
             <span
               style={{
-                fontSize: 10.5,
+                fontSize: 12,
                 lineHeight: 1,
                 padding: "3px 6px",
                 borderRadius: 999,
-                background: isActive ? "var(--violet-soft)" : "rgba(255,255,255,0.06)",
-                color: isActive ? "var(--violet)" : "var(--muted)",
+                background: isActive ? "var(--accent-soft)" : "rgba(255,255,255,0.06)",
+                color: isActive ? "var(--accent)" : "var(--muted)",
               }}
             >
               {s.count}
@@ -301,7 +302,7 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
           {stateValue && (
             <span
               className="mono status-pill"
-              style={{ color: "var(--violet)", borderColor: "var(--hairline)" }}
+              style={{ color: "var(--accent)", borderColor: "var(--hairline)" }}
             >
               {formatStateLabel(stateValue)}
             </span>
@@ -321,7 +322,7 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
       )}
 
       {points && (
-        <div className="mono" style={{ fontSize: 13, color: "var(--amber)" }}>
+        <div className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
           {points.value} pts
         </div>
       )}
@@ -335,9 +336,9 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
               background: "none",
               border: "1px solid var(--hairline)",
               color: "var(--muted)",
-              fontSize: 11,
+              fontSize: 12,
               padding: "4px 8px",
-              borderRadius: 6,
+              borderRadius: 4,
               cursor: "pointer",
             }}
           >
@@ -348,7 +349,7 @@ function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: stri
             <dl style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px" }}>
               {extraFields.map(([key, value]) => (
                 <Fragment key={key}>
-                  <dt className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
+                  <dt className="mono" style={{ fontSize: 12, color: "var(--muted)" }}>
                     {key}
                   </dt>
                   <dd style={{ fontSize: 12.5, margin: 0, wordBreak: "break-word" }}>
