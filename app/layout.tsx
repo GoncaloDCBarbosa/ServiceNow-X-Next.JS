@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { AppShell } from "./components/AppShell";
 
 // Self-hosted from the TRH Design System (tokens/README.md → typography.font.ui
 // / .mono). Local files avoid a runtime dependency on Google Fonts entirely.
@@ -23,9 +24,12 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "TRH Plus | Gamification Console",
+  title: {
+    default: "TRH Plus Gamification Console",
+    template: "%s — TRH Plus",
+  },
   description:
-    "Live console for TRH Plus challenges and users, built on the ServiceNow Table API.",
+    "Run the TRH Plus gamification programme: challenges, participations and players.",
 };
 
 export default function RootLayout({
@@ -38,7 +42,9 @@ export default function RootLayout({
       lang="en"
       className={`${interSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body>
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }

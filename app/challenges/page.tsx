@@ -1,65 +1,36 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { SiteHeader } from "../components/SiteHeader";
-import { normalizeRecords } from "@/lib/sn-format";
+import { Fragment, useMemo, useState } from "react";
+import {
+  Badge,
+  CardSkeleton,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  RecordLink,
+  SearchBox,
+  StageFilter,
+  useRecords,
+  type FilterOption,
+} from "../components/ui";
+import {
+  detectStageField,
+  fieldLabel,
+  formatValue,
+  isSystemField,
+  recordHref,
+  sortStages,
+  stageLabel,
+  stageTone,
+  TABLES,
+} from "@/lib/domain";
 
 type Challenge = Record<string, string>;
-type PageState = "loading" | "ready" | "error";
 
 const TITLE_FIELDS = ["name", "short_description", "number"];
-const DESCRIPTION_FIELDS = ["description", "short_description"];
+const SUMMARY_FIELDS = ["description", "short_description"];
 const POINTS_FIELDS = ["points", "reward_points", "u_points", "point_value"];
-
-// Candidate field names for whatever the table's lifecycle/state column
-// turns out to be called — ServiceNow custom apps vary on this.
-const STATE_FIELDS = ["state", "u_state", "workflow_state", "status", "publish_state"];
-
-// Known lifecycle words get a sensible left-to-right order; anything else
-// is sorted alphabetically after them.
-const STATE_ORDER = [
-  "draft",
-  "pending",
-  "in_review",
-  "review",
-  "published",
-  "active",
-  "archived",
-  "retired",
-  "closed",
-];
-
-function detectStateKey(records: Challenge[]) {
-  for (const key of STATE_FIELDS) {
-    if (records.some((r) => r[key])) return key;
-  }
-  return null;
-}
-
-function formatStateLabel(value: string) {
-  return value
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .split(" ")
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
-
-const HIDDEN_FIELDS = new Set([
-  "sys_id",
-  "sys_created_by",
-  "sys_created_on",
-  "sys_updated_by",
-  "sys_updated_on",
-  "sys_mod_count",
-  "sys_tags",
-  "sys_class_name",
-  "sys_domain",
-  "sys_domain_path",
-  "sys_package",
-  "sys_policy",
-  "sys_scope",
-]);
+const HEADLINE_FACTS = ["start_date", "end_date", "target", "level"];
 
 function pick(record: Challenge, keys: string[]) {
   for (const key of keys) {
@@ -68,315 +39,213 @@ function pick(record: Challenge, keys: string[]) {
   return null;
 }
 
-// ServiceNow "duration" fields are stored as a full timestamp pinned to the
-// 1970-01-01 epoch — only the HH:MM:SS part is meaningful, so strip the date.
-const SN_DURATION_PATTERN = /^1970-01-01 (\d{2}:\d{2}:\d{2})$/;
-
-function formatFieldValue(value: string) {
-  const match = value.match(SN_DURATION_PATTERN);
-  return match ? match[1] : value;
-}
-
 export default function ChallengesPage() {
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [status, setStatus] = useState<PageState>("loading");
-  const [error, setError] = useState<string>();
-  const [selectedState, setSelectedState] = useState("all");
+  const { records, state, error } = useRecords("/api/challenges?limit=100");
+  const [stage, setStage] = useState("all");
+  const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    fetch("/api/challenges?limit=50")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setChallenges(normalizeRecords(data.result ?? []));
-        setSelectedState("all");
-        setStatus("ready");
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Request failed.");
-        setStatus("error");
-      });
-  }, []);
+  const stageField = useMemo(() => detectStageField(records), [records]);
 
-  const stateKey = useMemo(() => detectStateKey(challenges), [challenges]);
-
-  const stateTabs = useMemo(() => {
-    if (!stateKey) return [];
+  const stageOptions = useMemo<FilterOption[]>(() => {
+    if (!stageField) return [];
 
     const counts = new Map<string, number>();
-    for (const c of challenges) {
-      const value = c[stateKey];
-      if (!value) continue;
-      counts.set(value, (counts.get(value) ?? 0) + 1);
+    for (const record of records) {
+      const value = record[stageField];
+      if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
     }
-
-    const sortedValues = Array.from(counts.keys()).sort((a, b) => {
-      const ia = STATE_ORDER.indexOf(a.toLowerCase());
-      const ib = STATE_ORDER.indexOf(b.toLowerCase());
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a.localeCompare(b);
-    });
+    if (counts.size < 2) return [];
 
     return [
-      { key: "all", label: "All", count: challenges.length },
-      ...sortedValues.map((value) => ({
+      { key: "all", label: "All", count: records.length },
+      ...sortStages([...counts.keys()]).map((value) => ({
         key: value,
-        label: formatStateLabel(value),
+        label: stageLabel(value),
         count: counts.get(value) ?? 0,
       })),
     ];
-  }, [challenges, stateKey]);
+  }, [records, stageField]);
 
-  const visibleChallenges = useMemo(() => {
-    if (!stateKey || selectedState === "all") return challenges;
-    return challenges.filter((c) => c[stateKey] === selectedState);
-  }, [challenges, stateKey, selectedState]);
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
+
+    return records.filter((record) => {
+      if (stageField && stage !== "all" && record[stageField] !== stage) return false;
+      if (!term) return true;
+      return Object.entries(record).some(
+        ([key, value]) => !isSystemField(key) && value.toLowerCase().includes(term)
+      );
+    });
+  }, [records, stageField, stage, query]);
 
   return (
     <>
-      <SiteHeader back={{ href: "/", label: "Console" }} />
+      <PageHeader
+        title="Challenges"
+        description="Everything people can take on: what it asks for, what it is worth, and when it runs."
+      />
 
-      <main className="container" style={{ paddingBottom: 80 }}>
-        <section style={{ marginBottom: 32 }}>
-          <p className="eyebrow mono" style={{ marginBottom: 10 }}>
-            x_trhrt_trh_plus_challenge
-          </p>
-          <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.015em", marginBottom: 8 }}>
-            Challenges
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: 15 }}>
-            {status === "ready"
-              ? `${challenges.length} record${challenges.length === 1 ? "" : "s"} loaded.`
-              : "Loading records from ServiceNow…"}
-          </p>
-        </section>
+      <div className="work-inner page-body">
+        {state === "loading" && <CardSkeleton />}
 
-        {status === "loading" && <SkeletonGrid />}
-
-        {status === "error" && (
-          <div className="panel" style={{ padding: 24, borderColor: "var(--bad)" }}>
-            <p className="mono" style={{ color: "var(--bad)", marginBottom: 6, fontSize: 13 }}>
-              Couldn&apos;t load challenges
-            </p>
-            <p style={{ color: "var(--muted)", fontSize: 14 }}>{error}</p>
-          </div>
+        {state === "error" && (
+          <ErrorState title="Challenges could not be loaded" message={error} />
         )}
 
-        {status === "ready" && challenges.length === 0 && (
-          <div className="panel" style={{ padding: 24 }}>
-            <p style={{ color: "var(--muted)" }}>
-              No challenges found in x_trhrt_trh_plus_challenge.
-            </p>
-          </div>
+        {state === "ready" && records.length === 0 && (
+          <EmptyState
+            title="No challenges yet"
+            text="Once a challenge is published in the gamification app, it will appear here."
+          />
         )}
 
-        {status === "ready" && challenges.length > 0 && (
+        {state === "ready" && records.length > 0 && (
           <>
-            {stateTabs.length > 1 && (
-              <StateTabs states={stateTabs} active={selectedState} onChange={setSelectedState} />
-            )}
+            <div className="toolbar">
+              {stageOptions.length > 0 ? (
+                <StageFilter
+                  options={stageOptions}
+                  active={stage}
+                  onChange={setStage}
+                  label="Filter challenges by stage"
+                />
+              ) : (
+                <span className="panel-note">
+                  {visible.length} of {records.length} challenges
+                </span>
+              )}
 
-            {visibleChallenges.length === 0 ? (
-              <div className="panel" style={{ padding: 24 }}>
-                <p style={{ color: "var(--muted)" }}>No challenges match this filter.</p>
-              </div>
+              <SearchBox
+                value={query}
+                onChange={setQuery}
+                label="Search challenges"
+                placeholder="Search challenges"
+              />
+            </div>
+
+            {visible.length === 0 ? (
+              <EmptyState
+                title="Nothing matches"
+                text="Try a different search term, or clear the stage filter to see every challenge."
+              />
             ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                  gap: 16,
-                }}
-              >
-                {visibleChallenges.map((c, i) => (
-                  <ChallengeCard key={c.sys_id ?? i} record={c} stateKey={stateKey} />
+              <div className="cards">
+                {visible.map((record, i) => (
+                  <ChallengeCard
+                    key={record.sys_id ?? i}
+                    record={record}
+                    stageField={stageField}
+                  />
                 ))}
               </div>
             )}
           </>
         )}
-      </main>
+      </div>
     </>
   );
 }
 
-function StateTabs({
-  states,
-  active,
-  onChange,
+function ChallengeCard({
+  record,
+  stageField,
 }: {
-  states: { key: string; label: string; count: number }[];
-  active: string;
-  onChange: (key: string) => void;
+  record: Challenge;
+  stageField: string | null;
 }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Filter challenges by state"
-      className="mono"
-      style={{
-        display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        marginBottom: 24,
-        borderBottom: "1px solid var(--hairline)",
-      }}
-    >
-      {states.map((s) => {
-        const isActive = s.key === active;
-        return (
-          <button
-            key={s.key}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(s.key)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              flexShrink: 0,
-              background: "none",
-              border: "none",
-              borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
-              color: isActive ? "var(--paper)" : "var(--muted)",
-              padding: "0 4px 10px",
-              marginRight: 18,
-              fontSize: 12.5,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              transition: "color 150ms ease, border-color 150ms ease",
-            }}
-          >
-            {s.label}
-            <span
-              style={{
-                fontSize: 12,
-                lineHeight: 1,
-                padding: "3px 6px",
-                borderRadius: 999,
-                background: isActive ? "var(--accent-soft)" : "rgba(255,255,255,0.06)",
-                color: isActive ? "var(--accent)" : "var(--muted)",
-              }}
-            >
-              {s.count}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ChallengeCard({ record, stateKey }: { record: Challenge; stateKey: string | null }) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const href = record.sys_id ? recordHref(TABLES.challenge, record.sys_id) : null;
 
   const title = pick(record, TITLE_FIELDS);
-  const description = pick(
-    record,
-    DESCRIPTION_FIELDS.filter((k) => k !== title?.key)
-  );
+  const summary = pick(record, SUMMARY_FIELDS.filter((k) => k !== title?.key));
   const points = pick(record, POINTS_FIELDS);
-  const isActive =
-    record.active === "true" ? true : record.active === "false" ? false : undefined;
-  const stateValue = stateKey ? record[stateKey] : undefined;
+  const stage = stageField ? record[stageField] : "";
+  const isActive = record.active === "true" ? true : record.active === "false" ? false : null;
 
-  const extraFields = Object.entries(record).filter(
+  const facts = HEADLINE_FACTS.filter((key) => record[key]).map((key) => ({
+    key,
+    value: record[key],
+  }));
+
+  const remaining = Object.entries(record).filter(
     ([key, value]) =>
       value &&
-      !HIDDEN_FIELDS.has(key) &&
+      !isSystemField(key) &&
       key !== title?.key &&
-      key !== description?.key &&
-      key !== stateKey
+      key !== summary?.key &&
+      key !== stageField &&
+      key !== points?.key &&
+      key !== "active" &&
+      !HEADLINE_FACTS.includes(key)
   );
 
   return (
-    <div className="panel" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {title?.value ?? "Untitled challenge"}
-        </h3>
+    <article className="card">
+      <div className="card-top">
+        <div>
+          <h2 className="card-title">
+            {href ? (
+              <RecordLink href={href} className="card-link">
+                {title?.value ?? "Untitled challenge"}
+              </RecordLink>
+            ) : (
+              (title?.value ?? "Untitled challenge")
+            )}
+          </h2>
+          {points && <p className="card-sub">Worth {points.value} points</p>}
+        </div>
+
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          {stateValue && (
-            <span
-              className="mono status-pill"
-              style={{ color: "var(--accent)", borderColor: "var(--hairline)" }}
-            >
-              {formatStateLabel(stateValue)}
-            </span>
-          )}
-          {isActive !== undefined && (
-            <span className={`status-pill ${isActive ? "status-pill--on" : "status-pill--off"}`}>
-              {isActive ? "Active" : "Inactive"}
-            </span>
-          )}
+          {stage && <Badge tone={stageTone(stage)}>{stageLabel(stage)}</Badge>}
+          {isActive === false && <Badge tone="neutral">Retired</Badge>}
         </div>
       </div>
 
-      {description && (
-        <p style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5, margin: 0 }}>
-          {description.value}
-        </p>
-      )}
+      {summary && <p className="card-text">{summary.value}</p>}
 
-      {points && (
-        <div className="mono" style={{ fontSize: 13, color: "var(--accent)" }}>
-          {points.value} pts
+      {facts.length > 0 && (
+        <div className="card-facts">
+          {facts.map((fact) => (
+            <div key={fact.key}>
+              <p className="fact-label">{fieldLabel(fact.key)}</p>
+              <p className="fact-value">{formatValue(fact.value)}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {extraFields.length > 0 && (
+      {(remaining.length > 0 || href) && (
         <div>
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="mono"
-            style={{
-              background: "none",
-              border: "1px solid var(--hairline)",
-              color: "var(--muted)",
-              fontSize: 12,
-              padding: "4px 8px",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            {expanded ? "Hide" : "Show"} all fields ({extraFields.length})
-          </button>
+          <div className="card-actions">
+            {remaining.length > 0 && (
+              <button
+                type="button"
+                className="detail-toggle"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+              >
+                {open ? "Hide details" : "Show details"}
+              </button>
+            )}
+            {href && (
+              <RecordLink href={href} className="detail-toggle">
+                Open record
+              </RecordLink>
+            )}
+          </div>
 
-          {expanded && (
-            <dl style={{ marginTop: 10, display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px" }}>
-              {extraFields.map(([key, value]) => (
+          {open && (
+            <dl className="detail-grid">
+              {remaining.map(([key, value]) => (
                 <Fragment key={key}>
-                  <dt className="mono" style={{ fontSize: 12, color: "var(--muted)" }}>
-                    {key}
-                  </dt>
-                  <dd style={{ fontSize: 12.5, margin: 0, wordBreak: "break-word" }}>
-                    {formatFieldValue(value)}
-                  </dd>
+                  <dt className="detail-key">{fieldLabel(key)}</dt>
+                  <dd className="detail-val">{formatValue(value)}</dd>
                 </Fragment>
               ))}
             </dl>
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function SkeletonGrid() {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-        gap: 16,
-      }}
-    >
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="panel" style={{ padding: 20, height: 140, opacity: 0.5 }} />
-      ))}
-    </div>
+    </article>
   );
 }

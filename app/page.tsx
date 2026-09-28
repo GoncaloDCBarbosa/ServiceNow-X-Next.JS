@@ -1,142 +1,248 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SiteHeader } from "./components/SiteHeader";
-import { HubTile, type FetchState } from "./components/HubTile";
-import { normalizeRecords } from "@/lib/sn-format";
-import { Target, Layers, Users } from "lucide-react";
+import Link from "next/link";
+import { useMemo } from "react";
+import { ArrowUpRight } from "lucide-react";
+import { PageHeader, Badge, ErrorState, RecordLink, useRecords } from "./components/ui";
+import {
+  detectStageField,
+  formatValue,
+  isCompletedStage,
+  recordHref,
+  stageLabel,
+  stageTone,
+  TABLES,
+  tableLabel,
+  tableTitle,
+} from "@/lib/domain";
 
-export default function Home() {
-  const [challengeState, setChallengeState] = useState<FetchState>("loading");
-  const [challengePreview, setChallengePreview] = useState<string[]>([]);
-  const [challengeError, setChallengeError] = useState<string>();
+const INSTANCES = tableLabel(TABLES.participation, true);
+const INSTANCES_TITLE = tableTitle(TABLES.participation, true);
 
-  const [instanceState, setInstanceState] = useState<FetchState>("loading");
-  const [instancePreview, setInstancePreview] = useState<string[]>([]);
-  const [instanceError, setInstanceError] = useState<string>();
+const TITLE_FIELDS = ["name", "short_description", "number"];
 
-  const [playerState, setPlayerState] = useState<FetchState>("loading");
-  const [playerPreview, setPlayerPreview] = useState<string[]>([]);
-  const [playerError, setPlayerError] = useState<string>();
+function titleOf(record: Record<string, string>, fallback: string): string {
+  for (const key of TITLE_FIELDS) {
+    if (record[key]) return record[key];
+  }
+  return fallback;
+}
 
-  useEffect(() => {
-    fetch("/api/challenges?limit=4")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        const rows = normalizeRecords(data.result ?? []);
-        setChallengePreview(
-          rows.map((r) => r.name || r.short_description || r.number || "Untitled challenge")
-        );
-        setChallengeState("ready");
+export default function OverviewPage() {
+  const challenges = useRecords("/api/challenges?limit=100");
+  const participations = useRecords("/api/challenge-instances?limit=200");
+  const players = useRecords("/api/players?limit=200");
+
+  const stageField = useMemo(
+    () => detectStageField(participations.records),
+    [participations.records]
+  );
+
+  /* Participations are grouped by the challenge they belong to, which is what
+     turns three record lists into an actual read on the programme. */
+  const uptake = useMemo(() => {
+    const byChallenge = new Map<string, { total: number; done: number }>();
+
+    for (const p of participations.records) {
+      const key = p.challenge;
+      if (!key) continue;
+      const entry = byChallenge.get(key) ?? { total: 0, done: 0 };
+      entry.total += 1;
+      const stage = stageField ? p[stageField] : "";
+      if (isCompletedStage(stage) || p.completed === "true") entry.done += 1;
+      byChallenge.set(key, entry);
+    }
+
+    return challenges.records
+      .map((challenge) => {
+        const name = titleOf(challenge, "Untitled challenge");
+        const counts = byChallenge.get(name) ?? { total: 0, done: 0 };
+        return { name, id: challenge.sys_id, ...counts };
       })
-      .catch((err) => {
-        setChallengeError(err instanceof Error ? err.message : "Request failed.");
-        setChallengeState("error");
-      });
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+      .slice(0, 6);
+  }, [challenges.records, participations.records, stageField]);
 
-    fetch("/api/challenge-instances?limit=4")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        const rows = normalizeRecords(data.result ?? []);
-        // This table has no name/short_description/number field — the
-        // instance's Challenge reference is its natural label instead.
-        setInstancePreview(
-          rows.map((r) => r.name || r.short_description || r.number || r.challenge || "Untitled instance")
-        );
-        setInstanceState("ready");
-      })
-      .catch((err) => {
-        setInstanceError(err instanceof Error ? err.message : "Request failed.");
-        setInstanceState("error");
-      });
+  const activeChallenges = challenges.records.filter((c) => c.active !== "false").length;
 
-    fetch("/api/players?limit=4")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        const rows = normalizeRecords(data.result ?? []);
-        // This table has no name field either — the field that actually
-        // holds the participant is "user" (a reference to sys_user), not
-        // "player".
-        setPlayerPreview(
-          rows.map((r) => r.name || r.user_name || r.user || r.number || "Unnamed player")
-        );
-        setPlayerState("ready");
-      })
-      .catch((err) => {
-        setPlayerError(err instanceof Error ? err.message : "Request failed.");
-        setPlayerState("error");
-      });
-  }, []);
+  const completed = participations.records.filter((p) => {
+    const stage = stageField ? p[stageField] : "";
+    return isCompletedStage(stage) || p.completed === "true";
+  }).length;
+
+  const inFlight = participations.records.length - completed;
+
+  const recent = participations.records.slice(0, 5);
+
+  const failed = challenges.state === "error" && participations.state === "error";
 
   return (
     <>
-      <SiteHeader />
+      <PageHeader
+        title="Overview"
+        description="Where the gamification programme stands right now — what people can take on, what they are working through, and who is taking part."
+      />
 
-      <main className="container" style={{ paddingBottom: 80 }}>
-        <section style={{ marginTop: 8, marginBottom: 44 }}>
-          <p className="caption" style={{ marginBottom: 12 }}>
-            TRH Plus · ServiceNow Gamification
-          </p>
-          <h1
-            style={{
-              fontSize: 32,
-              fontWeight: 700,
-              letterSpacing: "-0.015em",
-              maxWidth: 640,
-              marginBottom: 14,
-              lineHeight: 1.15,
-            }}
-          >
-            Command center for challenges and players.
-          </h1>
-          <p style={{ color: "var(--muted)", maxWidth: 560, fontSize: 16, lineHeight: 1.6 }}>
-            Live views into the tables behind TRH Plus — the challenges people complete, the
-            runs they&apos;re on, and the players earning points for them.
-          </p>
-        </section>
+      <div className="work-inner page-body">
+        {failed ? (
+          <ErrorState title="Nothing could be loaded" message={challenges.error} />
+        ) : (
+          <>
+            <section className="figures" aria-label="Programme summary">
+              <Figure
+                value={activeChallenges}
+                label="Challenges available"
+                loading={challenges.state === "loading"}
+              />
+              <Figure
+                value={inFlight}
+                label={`${INSTANCES_TITLE} in progress`}
+                loading={participations.state === "loading"}
+              />
+              <Figure
+                value={completed}
+                label="Completed"
+                loading={participations.state === "loading"}
+              />
+              <Figure
+                value={players.records.length}
+                label="Players enrolled"
+                loading={players.state === "loading"}
+              />
+            </section>
 
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-            gap: 20,
-          }}
-        >
-          <HubTile
-            href="/challenges"
-            icon={Target}
-            title="Challenges"
-            description="Every challenge configured in TRH Plus — active status, rewards, and timing."
-            table="x_trhrt_trh_plus_challenge"
-            status={challengeState}
-            preview={challengePreview}
-            errorMessage={challengeError}
-          />
-          <HubTile
-            href="/challenge-instances"
-            icon={Layers}
-            title="Challenge Instances"
-            description="Every in-progress or completed run of a challenge, tied to the player taking it on."
-            table="x_trhrt_trh_plus_challenge_instance"
-            status={instanceState}
-            preview={instancePreview}
-            errorMessage={instanceError}
-          />
-          <HubTile
-            href="/players"
-            icon={Users}
-            title="Players"
-            description="The gamification profile behind each participant."
-            table="x_trhrt_trh_plus_player"
-            status={playerState}
-            preview={playerPreview}
-            errorMessage={playerError}
-          />
-        </section>
-      </main>
+            <div className="split">
+              <section className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Challenge uptake</h2>
+                  <Link href="/challenges" className="panel-note" style={{ color: "var(--brand)" }}>
+                    All challenges
+                  </Link>
+                </div>
+
+                {uptake.length === 0 ? (
+                  <p className="panel-body panel-note">
+                    {challenges.state === "loading"
+                      ? "Loading…"
+                      : "No challenges have been published yet."}
+                  </p>
+                ) : (
+                  <div className="uptake">
+                    {uptake.map((row) => (
+                      <div key={row.name} className="uptake-row">
+                        <span className="uptake-name" title={row.name}>
+                          {row.id ? (
+                            <RecordLink href={recordHref(TABLES.challenge, row.id)}>
+                              {row.name}
+                            </RecordLink>
+                          ) : (
+                            row.name
+                          )}
+                        </span>
+                        <span className="uptake-meta">
+                          {row.total === 0
+                            ? "No takers"
+                            : `${row.done}/${row.total} done`}
+                        </span>
+                        <span
+                          className="meter"
+                          role="img"
+                          aria-label={
+                            row.total === 0
+                              ? `No ${INSTANCES}`
+                              : `${Math.round((row.done / row.total) * 100)} percent complete`
+                          }
+                        >
+                          {row.done > 0 && (
+                            <span
+                              className="meter-fill"
+                              style={{ width: `${(row.done / row.total) * 100}%` }}
+                            />
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="panel">
+                <div className="panel-head">
+                  <h2 className="panel-title">Latest {INSTANCES}</h2>
+                  <Link
+                    href="/challenge-instances"
+                    className="panel-note"
+                    style={{ color: "var(--brand)", display: "inline-flex", alignItems: "center", gap: 3 }}
+                  >
+                    Open
+                    <ArrowUpRight size={13} aria-hidden />
+                  </Link>
+                </div>
+
+                {recent.length === 0 ? (
+                  <p className="panel-body panel-note">
+                    {participations.state === "loading"
+                      ? "Loading…"
+                      : "Nobody has taken on a challenge yet."}
+                  </p>
+                ) : (
+                  <div className="uptake">
+                    {recent.map((p, i) => {
+                      const stage = stageField ? p[stageField] : "";
+                      return (
+                        <div
+                          key={p.sys_id ?? i}
+                          className="uptake-row"
+                          style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}
+                        >
+                          <span>
+                            <span className="uptake-name" title={p.challenge}>
+                              {p.sys_id ? (
+                                <RecordLink href={recordHref(TABLES.participation, p.sys_id)}>
+                                  {p.challenge || `Untitled ${tableLabel(TABLES.participation)}`}
+                                </RecordLink>
+                              ) : (
+                                p.challenge || `Untitled ${tableLabel(TABLES.participation)}`
+                              )}
+                            </span>
+                            <span className="card-sub">
+                              {formatValue(p.player || p.team || p.user)}
+                            </span>
+                          </span>
+                          {stage && (
+                            <Badge tone={stageTone(stage)}>{stageLabel(stage)}</Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
+        )}
+      </div>
     </>
+  );
+}
+
+function Figure({
+  value,
+  label,
+  loading,
+}: {
+  value: number;
+  label: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="figure">
+      {loading ? (
+        <span className="skeleton" style={{ display: "block", height: 28, width: 48 }} />
+      ) : (
+        <p className="figure-value">{value}</p>
+      )}
+      <p className="figure-label">{label}</p>
+    </div>
   );
 }
